@@ -93,19 +93,13 @@ check:
 	cd $(TMPDIR) && ./test_runner
 
 install: $(TARGET)
-	@echo "Installing $(TARGET) to $(BINDIR)..."
 	@mkdir -p $(BINDIR)
-	install -m 755 $(TARGET) $(BINDIR)/$(TARGET)
-	@echo "Installed to $(BINDIR)/$(TARGET)"
+	install -m 755 $(TARGET) $(BINDIR)/
+	@echo "Installed to $(BINDIR)/myapp"
 
 uninstall:
-	@echo "Uninstalling $(TARGET) from $(BINDIR)..."
-	@if [ -f "$(BINDIR)/$(TARGET)" ]; then \
-		rm -f $(BINDIR)/$(TARGET); \
-		echo "Removed $(BINDIR)/$(TARGET)"; \
-	else \
-		echo "$(TARGET) not found in $(BINDIR)"; \
-	fi
+	rm -f $(BINDIR)/myapp
+	@echo "Removed $(BINDIR)/myapp"
 
 tags:
 	@command -v ctags >/dev/null 2>&1 || { \
