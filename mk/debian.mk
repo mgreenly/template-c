@@ -6,8 +6,8 @@ CFLAG_PNG :=
 
 DISTRO_CFLAGS := -D_DEFAULT_SOURCE
 
-DISTRO_LDFLAGS := -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,--as-needed
+DISTRO_LDFLAGS := -Wl,-z,relro -Wl,-z,now -Wl,-z,noexecstack -Wl,--as-needed -pie
 
-DEV_PACKAGES := build-essential libssl-dev libpng-dev
+DEV_PACKAGES := build-essential libssl-dev libpng-dev cppcheck
 
 INSTALL_DEPS_CMD := sudo apt-get install $(DEV_PACKAGES)

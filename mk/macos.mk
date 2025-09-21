@@ -4,17 +4,13 @@ CFLAG_SSL :=
 LIB_PNG := -lpng
 CFLAG_PNG := 
 
-PREFIX := /usr/local
-BINDIR := $(PREFIX)/bin
-MANDIR := $(PREFIX)/share/man
-
 DISTRO_CFLAGS := -D_DARWIN_C_SOURCE
 
-DEV_PACKAGES := openssl libpng
+DEV_PACKAGES := openssl libpng clang-format
 
 INSTALL_DEPS_CMD := xcode-select --install; brew install $(DEV_PACKAGES)
 
-DISTRO_LDFLAGS := -Wl,-dead_strip
+DISTRO_LDFLAGS := -Wl,-dead_strip -Wl,-pie
 
 # macOS Homebrew library paths (if using Homebrew)
 ifneq (,$(wildcard /opt/homebrew/lib))

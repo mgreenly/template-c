@@ -34,7 +34,7 @@ endif
 
 CFLAGS = $(CFLAGS_BASE) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS)
 
-LDFLAGS_COMMON = -pie
+LDFLAGS_COMMON = 
 
 LDFLAGS = $(LDFLAGS_COMMON) $(DISTRO_LDFLAGS) $(LIB_SSL) $(LIB_PNG)
 
@@ -89,8 +89,8 @@ check:
 	fi
 	@mkdir -p $(TMPDIR)
 	@echo "Running tests..."
-	cd $(TMPDIR) && $(CC) $(CFLAGS_TEST) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I../vendor/Unity/src ../tests/foo_test.c ../src/foo.c ../$(UNITY_SRC) -o test_runner
-	cd $(TMPDIR) && ./test_runner
+	$(CC) $(CFLAGS_TEST) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I./vendor/Unity/src tests/foo_test.c src/foo.c $(UNITY_SRC) -MF $(TMPDIR)/test_runner.d -o $(TMPDIR)/test_runner
+	$(TMPDIR)/test_runner
 
 install: $(TARGET)
 	@mkdir -p $(BINDIR)
@@ -142,21 +142,21 @@ coverage:
 	fi
 	@mkdir -p $(REPORTSDIR) $(TMPDIR)
 	@echo "Running tests with coverage..."
-	cd $(TMPDIR) && $(CC) $(CFLAGS_TEST) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I../vendor/Unity/src ../tests/foo_test.c ../src/foo.c ../$(UNITY_SRC) --coverage -o test_runner
-	cd $(TMPDIR) && ./test_runner
+	$(CC) $(CFLAGS_TEST) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I./vendor/Unity/src tests/foo_test.c src/foo.c $(UNITY_SRC) --coverage -MF $(TMPDIR)/test_runner.d -o $(TMPDIR)/test_runner
+	$(TMPDIR)/test_runner
 	@echo "Generating coverage report..."
-	@cd $(TMPDIR) && for file in ../src/*.c ../tests/*.c; do \
+	@for file in src/*.c tests/*.c; do \
 		base=$$(basename $$file .c); \
-		if [ -f "$${base}.gcda" ]; then \
-			gcov "$${base}.gcda"; \
-		elif [ -f "test_runner-$${base}.gcda" ]; then \
-			gcov "test_runner-$${base}.gcda"; \
+		if [ -f "$(TMPDIR)/$${base}.gcda" ]; then \
+			cd $(TMPDIR) && gcov "$${base}.gcda"; \
+		elif [ -f "$(TMPDIR)/test_runner-$${base}.gcda" ]; then \
+			cd $(TMPDIR) && gcov "test_runner-$${base}.gcda"; \
 		fi; \
 	done
 	@mv $(TMPDIR)/*.gcov $(REPORTSDIR)/ 2>/dev/null || true
 	@echo "Coverage files: $(REPORTSDIR)/*.gcov (only our source code)"
 
-sanitize: CFLAGS = $(CFLAGS_COMMON) $(CFLAGS_DEBUG) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -fsanitize=address,undefined
+sanitize: CFLAGS = $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_COMMON) $(CFLAGS_DEBUG)) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -fsanitize=address,undefined
 sanitize: LDFLAGS = $(LDFLAGS_COMMON) $(DISTRO_LDFLAGS) $(LIB_SSL) $(LIB_PNG) -fsanitize=address,undefined
 sanitize: clean $(TARGET)
 	@if [ ! -d "vendor" ]; then \
@@ -165,8 +165,8 @@ sanitize: clean $(TARGET)
 	fi
 	@mkdir -p $(TMPDIR)
 	@echo "Running tests with sanitizers..."
-	cd $(TMPDIR) && $(CC) $(CFLAGS_TEST) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I../vendor/Unity/src ../tests/foo_test.c ../src/foo.c ../$(UNITY_SRC) -fsanitize=address,undefined -o test_runner
-	cd $(TMPDIR) && ./test_runner
+	$(CC) $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_TEST)) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I./vendor/Unity/src tests/foo_test.c src/foo.c $(UNITY_SRC) -fsanitize=address,undefined -MF $(TMPDIR)/test_runner.d -o $(TMPDIR)/test_runner
+	$(TMPDIR)/test_runner
 
 analyze:
 	@if [ ! -d "vendor" ]; then \
@@ -177,10 +177,10 @@ analyze:
 	@mkdir -p $(REPORTSDIR) $(TMPDIR)
 	@command -v clang >/dev/null 2>&1 && { \
 		echo "Using clang static analyzer..."; \
-		if cd $(TMPDIR) && clang --analyze $(CFLAGS_COMMON) -I../vendor/Unity/src $(DISTRO_CFLAGS) ../src/*.c ../tests/*.c; then \
+		if clang --analyze $(filter-out -MMD -MP,$(CFLAGS_COMMON)) -I./vendor/Unity/src $(DISTRO_CFLAGS) src/*.c tests/*.c; then \
 			echo "Static analysis completed - no issues found!"; \
 		fi; \
-		mv $(TMPDIR)/*.plist $(REPORTSDIR)/ 2>/dev/null || true; \
+		mv *.plist $(REPORTSDIR)/ 2>/dev/null || true; \
 	} || { \
 		echo "clang not found, trying cppcheck..."; \
 		command -v cppcheck >/dev/null 2>&1 && { \
