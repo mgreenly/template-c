@@ -15,10 +15,10 @@ CFLAGS_COMMON = -std=c17 -pedantic \
 
 CFLAGS_DEBUG = -D_FORTIFY_SOURCE=2 -g -O0
 
-CFLAGS_RELEASE_ONLY = -DNDEBUG -g -O3
+CFLAGS_RELEASE_OPTS = -DNDEBUG -g -O3
 
 CFLAGS_BASE = $(CFLAGS_COMMON) $(CFLAGS_DEBUG)
-CFLAGS_RELEASE = $(CFLAGS_COMMON) $(CFLAGS_RELEASE_ONLY)
+CFLAGS_RELEASE = $(CFLAGS_COMMON) $(CFLAGS_RELEASE_OPTS)
 
 # Test-specific flags (removes -Wmissing-prototypes for Unity tests)
 CFLAGS_TEST = $(filter-out -Wmissing-prototypes,$(CFLAGS_COMMON)) $(CFLAGS_DEBUG)
@@ -80,13 +80,16 @@ distclean: clean
 
 -include $(DEPS)
 
-.PHONY: all release clean distclean check install uninstall tags fmt help print-install-cmd coverage sanitize analyze validate
+.PHONY: all release clean distclean check install uninstall tags fmt help print-install-cmd coverage sanitize analyze validate require-vendor
 
-check:
+# Common vendor directory check
+require-vendor:
 	@if [ ! -d "vendor" ]; then \
 		echo "Error: Dependencies not found. Run './configure' first."; \
 		exit 1; \
 	fi
+
+check: require-vendor
 	@mkdir -p $(TMPDIR)
 	@echo "Running tests..."
 	$(CC) $(CFLAGS_TEST) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I./vendor/Unity/src tests/foo_test.c src/foo.c $(UNITY_SRC) -MF $(TMPDIR)/test_runner.d -o $(TMPDIR)/test_runner
@@ -135,11 +138,7 @@ help:
 print-install-cmd:
 	@echo "$(INSTALL_DEPS_CMD)"
 
-coverage:
-	@if [ ! -d "vendor" ]; then \
-		echo "Error: Dependencies not found. Run './configure' first."; \
-		exit 1; \
-	fi
+coverage: require-vendor
 	@mkdir -p $(REPORTSDIR) $(TMPDIR)
 	@echo "Running tests with coverage..."
 	$(CC) $(CFLAGS_TEST) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I./vendor/Unity/src tests/foo_test.c src/foo.c $(UNITY_SRC) --coverage -MF $(TMPDIR)/test_runner.d -o $(TMPDIR)/test_runner
@@ -158,21 +157,13 @@ coverage:
 
 sanitize: CFLAGS = $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_COMMON) $(CFLAGS_DEBUG)) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -fsanitize=address,undefined
 sanitize: LDFLAGS = $(LDFLAGS_COMMON) $(DISTRO_LDFLAGS) $(LIB_SSL) $(LIB_PNG) -fsanitize=address,undefined
-sanitize: clean $(TARGET)
-	@if [ ! -d "vendor" ]; then \
-		echo "Error: Dependencies not found. Run './configure' first."; \
-		exit 1; \
-	fi
+sanitize: require-vendor clean $(TARGET)
 	@mkdir -p $(TMPDIR)
 	@echo "Running tests with sanitizers..."
 	$(CC) $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_TEST)) $(CFLAGS_COMPILER) $(DISTRO_CFLAGS) -I./vendor/Unity/src tests/foo_test.c src/foo.c $(UNITY_SRC) -fsanitize=address,undefined -MF $(TMPDIR)/test_runner.d -o $(TMPDIR)/test_runner
 	$(TMPDIR)/test_runner
 
-analyze:
-	@if [ ! -d "vendor" ]; then \
-		echo "Error: Dependencies not found. Run './configure' first."; \
-		exit 1; \
-	fi
+analyze: require-vendor
 	@echo "Running static analysis..."
 	@mkdir -p $(REPORTSDIR) $(TMPDIR)
 	@command -v clang >/dev/null 2>&1 && { \
