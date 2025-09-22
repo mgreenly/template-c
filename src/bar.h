@@ -3,8 +3,8 @@
 
 #include <glib.h>
 
-/* String manipulation functions */
+// String manipulation functions
 GString *bar_reverse(const char *str);
 int bar_count_vowels(const char *str);
 
-#endif /* BAR_H */
+#endif // BAR_H
