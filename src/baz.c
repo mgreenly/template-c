@@ -1,4 +1,5 @@
 #include "baz.h"
+
 #include <limits.h>
 
 int baz_max(const int *array, int size) {

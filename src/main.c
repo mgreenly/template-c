@@ -1,5 +1,7 @@
 #include <stdio.h>
+
 #include <glib.h>
+
 #include "config.h"
 #include "foo.h"
 #include "bar.h"
