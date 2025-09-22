@@ -7,7 +7,6 @@
 
 int main(void) {
   printf("%s\n", PROGRAM_MESSAGE);
-  printf("Using libfoo version: %s\n", foo_get_version());
 
   // Use foo library
   int result = foo_add(5, 3);
