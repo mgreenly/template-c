@@ -18,6 +18,9 @@ bin/
 # Vendor dependencies (configured by ./configure)
 vendor/
 
+# agent config
+.claude
+
 # IDE and editor files
 .vscode/
 .idea/

@@ -1,36 +1,30 @@
-#include "unity.h"
+#include <glib.h>
 #include "../src/foo.h"
 
-void setUp(void) {
+static void test_foo_add_positive_numbers(void) {
+  g_assert_cmpint(foo_add(5, 3), ==, 8);
 }
 
-void tearDown(void) {
+static void test_foo_add_negative_numbers(void) {
+  g_assert_cmpint(foo_add(-5, -3), ==, -8);
 }
 
-void test_foo_add_positive_numbers(void) {
-  TEST_ASSERT_EQUAL(8, foo_add(5, 3));
+static void test_foo_add_mixed_numbers(void) {
+  g_assert_cmpint(foo_add(5, -3), ==, 2);
 }
 
-void test_foo_add_negative_numbers(void) {
-  TEST_ASSERT_EQUAL(-8, foo_add(-5, -3));
+static void test_foo_add_zero(void) {
+  g_assert_cmpint(foo_add(5, 0), ==, 5);
+  g_assert_cmpint(foo_add(0, 0), ==, 0);
 }
 
-void test_foo_add_mixed_numbers(void) {
-  TEST_ASSERT_EQUAL(2, foo_add(5, -3));
-}
+int main(int argc, char *argv[]) {
+  g_test_init(&argc, &argv, NULL);
 
-void test_foo_add_zero(void) {
-  TEST_ASSERT_EQUAL(5, foo_add(5, 0));
-  TEST_ASSERT_EQUAL(0, foo_add(0, 0));
-}
+  g_test_add_func("/foo/add_positive_numbers", test_foo_add_positive_numbers);
+  g_test_add_func("/foo/add_negative_numbers", test_foo_add_negative_numbers);
+  g_test_add_func("/foo/add_mixed_numbers", test_foo_add_mixed_numbers);
+  g_test_add_func("/foo/add_zero", test_foo_add_zero);
 
-int main(void) {
-  UNITY_BEGIN();
-
-  RUN_TEST(test_foo_add_positive_numbers);
-  RUN_TEST(test_foo_add_negative_numbers);
-  RUN_TEST(test_foo_add_mixed_numbers);
-  RUN_TEST(test_foo_add_zero);
-
-  return UNITY_END();
+  return g_test_run();
 }

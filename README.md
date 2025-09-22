@@ -44,14 +44,65 @@ A C project template for Linux distributions and macOS with simple Makefile.
 
 The build system detects your distribution and loads the corresponding configuration file:
 
-- **Debian**: `mk/debian.mk`
-- **macOS**: `mk/darwin.mk`
+- **Debian/Ubuntu**: `mk/debian.mk`
+- **macOS (Darwin)**: `mk/darwin.mk`
 
 To add support for a new distribution, simply create `mk/{distro-id}.mk` and define the library flags and paths for that system. The makefile structure is straightforward and easy to understand.
 
 ## Building
 
 Check `make help` for all available make targets.
+
+## Testing
+
+The project uses GLib's test framework for unit testing. Tests are automatically discovered from `tests/*_test.c` files.
+
+### Running Tests
+
+```bash
+# Run all tests
+make check
+
+# Run tests with coverage analysis
+make coverage
+
+# Run tests with sanitizers (AddressSanitizer and UBSan)
+make sanitize
+```
+
+### Running Specific Tests
+
+GLib tests support targeting specific test functions, which is useful for debugging:
+
+```bash
+# Build the tests first
+make check
+
+# List all available tests in a test executable
+tmp/foo_test -l
+
+# Run a specific test function
+tmp/foo_test -p /foo/add_positive_numbers
+
+# Run multiple specific tests
+tmp/foo_test -p /foo/add_negative_numbers -p /foo/add_zero
+
+# Skip specific tests
+tmp/foo_test -s /foo/add_zero
+
+# Run with verbose output
+tmp/foo_test --verbose
+
+# Use a specific random seed for reproducibility
+tmp/foo_test --seed R02S1234567890abcdef
+```
+
+### Adding New Tests
+
+To add tests for a new library:
+1. Create `src/mylib.c` with your library code
+2. Create `tests/mylib_test.c` with GLib test cases
+3. Run `make check` - the test will be automatically discovered and run
 
 ## Adding Dependencies
 
