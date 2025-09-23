@@ -58,25 +58,20 @@ clean:
 
 -include $(DEPS)
 
-.PHONY: all release clean check install uninstall tags fmt help deps run coverage sanitize analyze check-all require-glib
+.PHONY: all release clean check install uninstall tags fmt help deps run coverage sanitize analyze check-all
 
-# Check for GLib availability
-require-glib:
-	@pkg-config --exists glib-2.0 || { \
-		echo "Error: GLib 2.0 not found. Install glib2 development package."; \
-		exit 1; \
-	}
-
-check: require-glib
+check:
 	@mkdir -p $(TMPDIR)
 	@echo "Running tests..."
 	@for test in tests/*_test.c; do \
+		echo ""; \
 		testname=$$(basename $$test .c); \
 		libname=$${testname%_test}; \
-		echo "Testing $$libname..."; \
+		echo "testing $$libname..."; \
 		$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(LDFLAGS) -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
 		$(TMPDIR)/$$testname || exit 1; \
 	done
+	@echo ""
 
 install: $(EXECUTABLE)
 	@mkdir -p $(PREFIX)/bin
@@ -169,7 +164,7 @@ analyze:
 	@mkdir -p $(REPORTSDIR) $(TMPDIR)
 	@command -v clang >/dev/null 2>&1 && { \
 		echo "Using clang static analyzer..."; \
-		if clang --analyze $(filter-out -MMD -MP,$(CFLAGS)) src/*.c tests/*.c; then \
+		if clang --analyze $(filter-out -MMD -MP -fanalyzer,$(CFLAGS)) src/*.c tests/*.c; then \
 			echo "Static analysis completed - no issues found!"; \
 		fi; \
 		mv *.plist $(REPORTSDIR)/ 2>/dev/null || true; \
