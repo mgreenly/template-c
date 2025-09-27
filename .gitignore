@@ -1,6 +1,7 @@
 # Build directories
 obj/
 bin/
+lib/
 reports/
 tmp/
 
@@ -51,3 +52,5 @@ core.*
 docs/_build/
 docs/html/
 docs/latex/
+
+example/demo

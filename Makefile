@@ -16,71 +16,121 @@ CFLAGS_RELEASE_OPTS = -DNDEBUG -g -O3
 CFLAGS_BASE = $(CFLAGS_COMMON) $(CFLAGS_DEBUG)
 CFLAGS_RELEASE = $(CFLAGS_COMMON) $(CFLAGS_RELEASE_OPTS)
 
-CFLAGS_TEST = $(filter-out -Wmissing-prototypes,$(CFLAGS_COMMON)) $(CFLAGS_DEBUG) $(DISTRO_CFLAGS)
+CFLAGS_TEST = $(filter-out -Wmissing-prototypes,$(CFLAGS_COMMON)) $(CFLAGS_DEBUG) $(DISTRO_CFLAGS) $(GLIB_CFLAGS)
 
-CFLAGS = $(CFLAGS_BASE) $(DISTRO_CFLAGS)
+CFLAGS = $(CFLAGS_BASE) $(DISTRO_CFLAGS) $(PNG_CFLAGS)
 
 LDFLAGS = $(DISTRO_LDFLAGS)
 
-PREFIX ?= $(HOME)/.local
+ifeq ($(PREFIX),)
+PREFIX = /usr/local
+endif
 
 SRCDIR := src
 OBJDIR := obj
-BINDIR := bin
+LIBDIR := lib
 REPORTSDIR := reports
 TMPDIR := tmp
 
-SOURCES := $(wildcard $(SRCDIR)/*.c)
-OBJECTS := $(SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
-DEPS := $(OBJECTS:.o=.d)
+# Library name and version
+LIBNAME := foo
+VERSION_MAJOR := 0
+VERSION_MINOR := 1
+VERSION_PATCH := 0
+VERSION := $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)
+SOVERSION := $(VERSION_MAJOR)
 
-EXECUTABLE := $(BINDIR)/myapp
+# Library source files (only foo.c)
+LIB_SOURCES := $(SRCDIR)/foo.c
+LIB_OBJECTS := $(LIB_SOURCES:$(SRCDIR)/%.c=$(OBJDIR)/%.o)
+LIB_DEPS := $(LIB_OBJECTS:.o=.d)
 
-all: $(EXECUTABLE)
+# All objects and dependencies
+OBJECTS := $(LIB_OBJECTS)
+DEPS := $(LIB_DEPS)
+
+# Library files
+STATIC_LIB := $(LIBDIR)/lib$(LIBNAME).a
+DYNAMIC_LIB := $(LIBDIR)/lib$(LIBNAME).so.$(VERSION)
+DYNAMIC_LIB_SONAME := $(LIBDIR)/lib$(LIBNAME).so.$(SOVERSION)
+DYNAMIC_LIB_LINK := $(LIBDIR)/lib$(LIBNAME).so
+
+# Library installation directory (set by distro-specific makefile)
+# On Debian: $(PREFIX)/lib/amd64-linux-gnu, on macOS: $(PREFIX)/lib
+LIBDIR_INSTALL := $(PREFIX)/lib$(if $(MULTIARCH_TUPLE),/$(MULTIARCH_TUPLE))
+
+all: $(STATIC_LIB) $(DYNAMIC_LIB) $(LIBNAME).pc
 
 release: CFLAGS = $(CFLAGS_RELEASE) $(DISTRO_CFLAGS)
-release: clean $(EXECUTABLE)
+release: clean all
 
 $(OBJDIR):
 	mkdir -p $(OBJDIR)
 
-$(BINDIR):
-	mkdir -p $(BINDIR)
+$(LIBDIR):
+	mkdir -p $(LIBDIR)
 
 $(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
-$(EXECUTABLE): $(OBJECTS) | $(BINDIR)
-	$(CC) $(OBJECTS) $(LDFLAGS) -o $@
+# Static library
+$(STATIC_LIB): $(LIB_OBJECTS) | $(LIBDIR)
+	ar rcs $@ $^
+
+# Dynamic library
+$(DYNAMIC_LIB): $(LIB_OBJECTS) | $(LIBDIR)
+	$(CC) -shared -Wl,-soname,lib$(LIBNAME).so.$(SOVERSION) $(LIB_OBJECTS) $(PNG_LIBS) -o $@
+	cd $(LIBDIR) && ln -sf lib$(LIBNAME).so.$(VERSION) lib$(LIBNAME).so.$(SOVERSION)
+	cd $(LIBDIR) && ln -sf lib$(LIBNAME).so.$(VERSION) lib$(LIBNAME).so
+
 
 clean:
-	rm -rf $(OBJDIR) $(BINDIR) $(REPORTSDIR) $(TMPDIR) tags
+	rm -rf $(OBJDIR) $(LIBDIR) $(REPORTSDIR) $(TMPDIR) tags $(LIBNAME).pc
 
 -include $(DEPS)
 
-.PHONY: all release clean check install uninstall tags fmt help deps run coverage sanitize analyze check-all
+.PHONY: all release clean check install uninstall tags fmt help deps check-deps coverage sanitize analyze check-all
 
-check:
+check: require-glib
 	@mkdir -p $(TMPDIR)
 	@echo "Running tests..."
 	@for test in tests/*_test.c; do \
 		echo ""; \
 		testname=$$(basename $$test .c); \
 		libname=$${testname%_test}; \
-		echo "testing $$libname..."; \
-		$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(LDFLAGS) -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
-		$(TMPDIR)/$$testname || exit 1; \
+		if [ "$$libname" = "foo" ]; then \
+			echo "testing $$libname..."; \
+			$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(GLIB_LIBS) -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
+			$(TMPDIR)/$$testname || exit 1; \
+		fi; \
 	done
 	@echo ""
 
-install: $(EXECUTABLE)
-	@mkdir -p $(PREFIX)/bin
-	install -m 755 $(EXECUTABLE) $(PREFIX)/bin/
-	@echo "Installed executable to $(PREFIX)/bin/myapp"
+# Generate pkg-config file
+$(LIBNAME).pc: pkgconfig/$(LIBNAME).pc.in
+	sed -e 's|@PREFIX@|$(PREFIX)|g' \
+	    -e 's|@LIBDIR_INSTALL@|$(LIBDIR_INSTALL)|g' \
+	    -e 's|@VERSION@|$(VERSION)|g' \
+	    -e 's|@PNG_PC_REQUIRES@|$(PNG_PC_REQUIRES)|g' \
+	    $< > $@
+
+install: $(STATIC_LIB) $(DYNAMIC_LIB) $(LIBNAME).pc
+	@mkdir -p $(LIBDIR_INSTALL)
+	@mkdir -p $(PREFIX)/include/$(LIBNAME)
+	@mkdir -p $(PREFIX)/lib/pkgconfig
+	install -m 644 $(STATIC_LIB) $(LIBDIR_INSTALL)/
+	install -m 755 $(DYNAMIC_LIB) $(LIBDIR_INSTALL)/
+	cd $(LIBDIR_INSTALL) && ln -sf lib$(LIBNAME).so.$(VERSION) lib$(LIBNAME).so.$(SOVERSION)
+	cd $(LIBDIR_INSTALL) && ln -sf lib$(LIBNAME).so.$(VERSION) lib$(LIBNAME).so
+	install -m 644 src/$(LIBNAME).h $(PREFIX)/include/$(LIBNAME)/
+	install -m 644 src/version.h $(PREFIX)/include/$(LIBNAME)/
+	install -m 644 $(LIBNAME).pc $(PREFIX)/lib/pkgconfig/
 
 uninstall:
-	rm -f $(PREFIX)/bin/myapp
-	@echo "Removed $(PREFIX)/bin/myapp"
+	rm -f $(LIBDIR_INSTALL)/lib$(LIBNAME).a
+	rm -f $(LIBDIR_INSTALL)/lib$(LIBNAME).so*
+	rm -rf $(PREFIX)/include/$(LIBNAME)
+	rm -f $(PREFIX)/lib/pkgconfig/$(LIBNAME).pc
 
 tags:
 	@command -v ctags >/dev/null 2>&1 || { \
@@ -89,8 +139,6 @@ tags:
 	}
 	ctags -R $(SRCDIR)
 
-run: $(EXECUTABLE)
-	$(EXECUTABLE)
 
 fmt:
 	@find $(SRCDIR) tests \( -name "*.c" -o -name "*.h" \) -type f \
@@ -101,13 +149,13 @@ fmt:
 
 help:
 	@echo "Available targets:"
-	@echo "  all       - Build the project (default, debug mode)"
+	@echo "  all       - Build static and dynamic libraries (default, debug mode)"
 	@echo "  release   - Build optimized release version"
-	@echo "  run       - Build and run the executable"
 	@echo "  clean     - Remove build artifacts"
 	@echo "  deps      - Show package installation instructions"
-	@echo "  install   - Install the program"
-	@echo "  uninstall - Uninstall the program"
+	@echo "  check-deps - Check if build dependencies are available"
+	@echo "  install   - Install the library"
+	@echo "  uninstall - Uninstall the library"
 	@echo "  check     - Run tests"
 	@echo "  coverage  - Run tests with coverage analysis"
 	@echo "  sanitize  - Run tests with AddressSanitizer and UBSan"
@@ -119,10 +167,30 @@ help:
 
 deps:
 	@echo ""
-	@echo "To install required development packages."
+	@echo "To install required development packages:"
 	@echo ""
 	@echo "  $(INSTALL_DEPS_CMD)"
 	@echo ""
+	@echo "To check if all dependencies are available:"
+	@echo ""
+	@echo "  make check-deps"
+	@echo ""
+
+check-deps:
+	@echo "Checking build dependencies..."
+	@command -v pkg-config >/dev/null 2>&1 || { \
+		echo "Error: pkg-config not found. Please install pkg-config."; \
+		exit 1; \
+	}
+	@echo "✓ pkg-config found"
+	@echo "All dependencies satisfied!"
+
+require-glib:
+	@pkg-config --exists glib-2.0 || { \
+		echo "Error: GLib 2.0 not found. Please install libglib2.0-dev"; \
+		echo "Run: $(INSTALL_DEPS_CMD)"; \
+		exit 1; \
+	}
 
 coverage: require-glib
 	@mkdir -p $(REPORTSDIR) $(TMPDIR)
@@ -130,21 +198,25 @@ coverage: require-glib
 	@for test in tests/*_test.c; do \
 		testname=$$(basename $$test .c); \
 		libname=$${testname%_test}; \
-		echo "Testing $$libname with coverage..."; \
-		$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(LDFLAGS) --coverage -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
-		$(TMPDIR)/$$testname || exit 1; \
+		if [ "$$libname" = "foo" ]; then \
+			echo "Testing $$libname with coverage..."; \
+			$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(GLIB_LIBS) --coverage -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
+			$(TMPDIR)/$$testname || exit 1; \
+		fi; \
 	done
 	@echo "Generating coverage report..."
-	@for file in src/*.c tests/*.c; do \
-		base=$$(basename $$file .c); \
-		for testfile in $(TMPDIR)/*_test-$${base}.gcda $(TMPDIR)/$${base}.gcda; do \
-			if [ -f "$$testfile" ]; then \
-				cd $(TMPDIR) && gcov "$$(basename $$testfile)"; \
-			fi; \
-		done; \
+	@for file in src/foo.c tests/foo_test.c; do \
+		if [ -f "$$file" ]; then \
+			base=$$(basename $$file .c); \
+			for testfile in $(TMPDIR)/*_test-$${base}.gcda $(TMPDIR)/$${base}.gcda; do \
+				if [ -f "$$testfile" ]; then \
+					cd $(TMPDIR) && gcov "$$(basename $$testfile)"; \
+				fi; \
+			done; \
+		fi; \
 	done
 	@mv $(TMPDIR)/*.gcov $(REPORTSDIR)/ 2>/dev/null || true
-	@echo "Coverage files: $(REPORTSDIR)/*.gcov (only our source code)"
+	@echo "Coverage files: $(REPORTSDIR)/*.gcov"
 
 sanitize: CFLAGS = $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_COMMON) $(CFLAGS_DEBUG)) $(DISTRO_CFLAGS) -fsanitize=address,undefined
 sanitize: LDFLAGS = $(DISTRO_LDFLAGS) -fsanitize=address,undefined
@@ -154,9 +226,11 @@ sanitize: require-glib clean
 	@for test in tests/*_test.c; do \
 		testname=$$(basename $$test .c); \
 		libname=$${testname%_test}; \
-		echo "Testing $$libname with sanitizers..."; \
-		$(CC) $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_TEST)) -I./src $$test src/$$libname.c $(LDFLAGS) -fsanitize=address,undefined -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
-		$(TMPDIR)/$$testname || exit 1; \
+		if [ "$$libname" = "foo" ]; then \
+			echo "Testing $$libname with sanitizers..."; \
+			$(CC) $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_TEST)) -I./src $$test src/$$libname.c $(GLIB_LIBS) -fsanitize=address,undefined -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
+			$(TMPDIR)/$$testname || exit 1; \
+		fi; \
 	done
 
 analyze:
@@ -164,14 +238,14 @@ analyze:
 	@mkdir -p $(REPORTSDIR) $(TMPDIR)
 	@command -v clang >/dev/null 2>&1 && { \
 		echo "Using clang static analyzer..."; \
-		if clang --analyze $(filter-out -MMD -MP -fanalyzer,$(CFLAGS)) src/*.c tests/*.c; then \
+		if clang --analyze $(filter-out -MMD -MP -fanalyzer,$(CFLAGS)) src/foo.c tests/foo_test.c; then \
 			echo "Static analysis completed - no issues found!"; \
 		fi; \
 		mv *.plist $(REPORTSDIR)/ 2>/dev/null || true; \
 	} || { \
 		echo "clang not found, trying cppcheck..."; \
 		command -v cppcheck >/dev/null 2>&1 && { \
-			cppcheck --enable=all --std=c17 --suppress=missingIncludeSystem --suppress=missingInclude src/ --quiet && \
+			cppcheck --enable=all --std=c17 --suppress=missingIncludeSystem --suppress=missingInclude src/foo.c --quiet && \
 			echo "Static analysis completed - no issues found!"; \
 		} || { \
 			echo "No static analysis tools found. Install clang or cppcheck."; \

@@ -1,6 +1,9 @@
 # Compiler selection (macOS default is clang)
 CC := clang
 
+# macOS doesn't use multiarch tuples - libraries go directly in lib/
+MULTIARCH_TUPLE :=
+
 # Libraries to include - ADD NEW LIBRARIES HERE
 # To add a new library, define its _LIBS and _CFLAGS below
 
@@ -9,20 +12,26 @@ ifneq (,$(wildcard /opt/homebrew/lib))
     # Apple Silicon Macs
     SSL_LIBS := -L/opt/homebrew/lib -lssl -lcrypto
     SSL_CFLAGS := -I/opt/homebrew/include
-    PNG_LIBS := -L/opt/homebrew/lib -lpng
+    PNG_NAME := png
+    PNG_LIBS := -L/opt/homebrew/lib -l$(PNG_NAME)
     PNG_CFLAGS := -I/opt/homebrew/include
+    PNG_PC_REQUIRES := lib$(PNG_NAME)
 else ifneq (,$(wildcard /usr/local/lib))
     # Intel Macs
     SSL_LIBS := -L/usr/local/lib -lssl -lcrypto
     SSL_CFLAGS := -I/usr/local/include
-    PNG_LIBS := -L/usr/local/lib -lpng
+    PNG_NAME := png
+    PNG_LIBS := -L/usr/local/lib -l$(PNG_NAME)
     PNG_CFLAGS := -I/usr/local/include
+    PNG_PC_REQUIRES := lib$(PNG_NAME)
 else
     # System default
     SSL_LIBS := -lssl -lcrypto
     SSL_CFLAGS :=
-    PNG_LIBS := -lpng
-    PNG_CFLAGS :=
+    PNG_NAME := png
+    PNG_LIBS := -l$(PNG_NAME)
+    PNG_CFLAGS := $(shell pkg-config --cflags lib$(PNG_NAME) 2>/dev/null)
+    PNG_PC_REQUIRES := lib$(PNG_NAME)
 endif
 
 # Testing framework
