@@ -1,6 +1,29 @@
+# User-configurable variables
+LIBNAME := foo
+VERSION_MAJOR := 0
+VERSION_MINOR := 1
+VERSION_PATCH := 0
+
+ifeq ($(PREFIX),)
+PREFIX = /usr/local
+endif
+
+# Derived version variables
+VERSION := $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)
+SOVERSION := $(VERSION_MAJOR)
+
+# Platform detection and distro-specific configuration
 DISTRO := $(shell if [ "$(shell uname -s)" = "Darwin" ]; then echo "darwin"; elif [ -f /etc/os-release ]; then . /etc/os-release && echo $$ID; else echo "unknown"; fi)
 -include mk/$(DISTRO).mk
 
+# Directory structure
+SRCDIR := src
+OBJDIR := obj
+LIBDIR := lib
+REPORTSDIR := reports
+TMPDIR := tmp
+
+# Compiler flags
 CFLAGS_COMMON = -std=c17 -pedantic \
   -Wshadow -Wstrict-prototypes -Wmissing-prototypes -Wwrite-strings \
   -Werror -Wall -Wextra -Wformat=2 -Wconversion -Wcast-qual -Wundef \
@@ -16,29 +39,11 @@ CFLAGS_RELEASE_OPTS = -DNDEBUG -g -O3
 CFLAGS_BASE = $(CFLAGS_COMMON) $(CFLAGS_DEBUG)
 CFLAGS_RELEASE = $(CFLAGS_COMMON) $(CFLAGS_RELEASE_OPTS)
 
-CFLAGS_TEST = $(filter-out -Wmissing-prototypes,$(CFLAGS_COMMON)) $(CFLAGS_DEBUG) $(DISTRO_CFLAGS) $(GLIB_CFLAGS)
+CFLAGS_TEST = $(filter-out -Wmissing-prototypes,$(CFLAGS_COMMON)) $(CFLAGS_DEBUG) $(TEST_CFLAGS)
 
-CFLAGS = $(CFLAGS_BASE) $(DISTRO_CFLAGS) $(PNG_CFLAGS)
+CFLAGS = $(CFLAGS_BASE) $(DISTRO_CFLAGS)
 
 LDFLAGS = $(DISTRO_LDFLAGS)
-
-ifeq ($(PREFIX),)
-PREFIX = /usr/local
-endif
-
-SRCDIR := src
-OBJDIR := obj
-LIBDIR := lib
-REPORTSDIR := reports
-TMPDIR := tmp
-
-# Library name and version
-LIBNAME := foo
-VERSION_MAJOR := 0
-VERSION_MINOR := 1
-VERSION_PATCH := 0
-VERSION := $(VERSION_MAJOR).$(VERSION_MINOR).$(VERSION_PATCH)
-SOVERSION := $(VERSION_MAJOR)
 
 # Library source files (only foo.c)
 LIB_SOURCES := $(SRCDIR)/foo.c
@@ -70,7 +75,25 @@ $(OBJDIR):
 $(LIBDIR):
 	mkdir -p $(LIBDIR)
 
-$(OBJDIR)/%.o: $(SRCDIR)/%.c | $(OBJDIR)
+# Generate version.h from Makefile variables
+$(SRCDIR)/version.h: Makefile
+	@echo "Generating version.h..."
+	@echo "#ifndef FOO_VERSION_H" > $@
+	@echo "#define FOO_VERSION_H" >> $@
+	@echo "" >> $@
+	@echo "#define FOO_VERSION_MAJOR $(VERSION_MAJOR)" >> $@
+	@echo "#define FOO_VERSION_MINOR $(VERSION_MINOR)" >> $@
+	@echo "#define FOO_VERSION_PATCH $(VERSION_PATCH)" >> $@
+	@echo "" >> $@
+	@echo "#define FOO_VERSION_STRING \"$(VERSION)\"" >> $@
+	@echo "" >> $@
+	@echo "#define FOO_MAKE_VERSION(major, minor, patch) ((major) * 10000 + (minor) * 100 + (patch))" >> $@
+	@echo "" >> $@
+	@echo "#define FOO_VERSION FOO_MAKE_VERSION(FOO_VERSION_MAJOR, FOO_VERSION_MINOR, FOO_VERSION_PATCH)" >> $@
+	@echo "" >> $@
+	@echo "#endif" >> $@
+
+$(OBJDIR)/%.o: $(SRCDIR)/%.c $(SRCDIR)/version.h | $(OBJDIR)
 	$(CC) $(CFLAGS) -c $< -o $@
 
 # Static library
@@ -85,7 +108,7 @@ $(DYNAMIC_LIB): $(LIB_OBJECTS) | $(LIBDIR)
 
 
 clean:
-	rm -rf $(OBJDIR) $(LIBDIR) $(REPORTSDIR) $(TMPDIR) tags $(LIBNAME).pc
+	rm -rf $(OBJDIR) $(LIBDIR) $(REPORTSDIR) $(TMPDIR) tags $(LIBNAME).pc $(SRCDIR)/version.h
 
 -include $(DEPS)
 
@@ -100,7 +123,7 @@ check: require-glib
 		libname=$${testname%_test}; \
 		if [ "$$libname" = "foo" ]; then \
 			echo "testing $$libname..."; \
-			$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(GLIB_LIBS) -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
+			$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(TEST_LDFLAGS) -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
 			$(TMPDIR)/$$testname || exit 1; \
 		fi; \
 	done
@@ -111,7 +134,7 @@ $(LIBNAME).pc: pkgconfig/$(LIBNAME).pc.in
 	sed -e 's|@PREFIX@|$(PREFIX)|g' \
 	    -e 's|@LIBDIR_INSTALL@|$(LIBDIR_INSTALL)|g' \
 	    -e 's|@VERSION@|$(VERSION)|g' \
-	    -e 's|@PNG_PC_REQUIRES@|$(PNG_PC_REQUIRES)|g' \
+	    -e 's|@PC_REQUIRES@|$(PC_REQUIRES)|g' \
 	    $< > $@
 
 install: $(STATIC_LIB) $(DYNAMIC_LIB) $(LIBNAME).pc
@@ -149,21 +172,21 @@ fmt:
 
 help:
 	@echo "Available targets:"
-	@echo "  all       - Build static and dynamic libraries (default, debug mode)"
-	@echo "  release   - Build optimized release version"
-	@echo "  clean     - Remove build artifacts"
-	@echo "  deps      - Show package installation instructions"
+	@echo "  all        - Build static and dynamic libraries (default, debug mode)"
+	@echo "  release    - Build optimized release version"
+	@echo "  clean      - Remove build artifacts"
+	@echo "  install    - Install the library (use PREFIX=/path to specify location)"
+	@echo "  uninstall  - Uninstall the library"
+	@echo "  check      - Run tests"
+	@echo "  check-all  - Run comprehensive checks (check + analyze + sanitize + coverage)"
+	@echo "  analyze    - Run static analysis (clang or cppcheck)"
+	@echo "  sanitize   - Run tests with AddressSanitizer and UBSan"
+	@echo "  coverage   - Run tests with coverage analysis"
+	@echo "  fmt        - Format code with clang-format"
+	@echo "  tags       - Generate ctags file"
+	@echo "  deps       - Show package installation instructions"
 	@echo "  check-deps - Check if build dependencies are available"
-	@echo "  install   - Install the library"
-	@echo "  uninstall - Uninstall the library"
-	@echo "  check     - Run tests"
-	@echo "  coverage  - Run tests with coverage analysis"
-	@echo "  sanitize  - Run tests with AddressSanitizer and UBSan"
-	@echo "  analyze   - Run static analysis (clang or cppcheck)"
-	@echo "  check-all - Run comprehensive checks (check + analyze + sanitize + coverage)"
-	@echo "  tags      - Generate ctags file"
-	@echo "  fmt       - Format code with clang-format"
-	@echo "  help      - Show this help message"
+	@echo "  help       - Show this help message"
 
 deps:
 	@echo ""
@@ -178,12 +201,38 @@ deps:
 
 check-deps:
 	@echo "Checking build dependencies..."
-	@command -v pkg-config >/dev/null 2>&1 || { \
-		echo "Error: pkg-config not found. Please install pkg-config."; \
+	@failed=0; \
+	echo "Essential tools:"; \
+	command -v pkg-config >/dev/null 2>&1 || { \
+		echo "  ✗ pkg-config not found"; \
+		failed=1; \
+	} && echo "  ✓ pkg-config found"; \
+	command -v $(CC) >/dev/null 2>&1 || { \
+		echo "  ✗ $(CC) not found"; \
+		failed=1; \
+	} && echo "  ✓ $(CC) found"; \
+	echo "Required libraries:"; \
+	for pkg in $(CHECK_PC_PACKAGES); do \
+		pkg-config --exists $$pkg 2>/dev/null || { \
+			echo "  ✗ $$pkg not found"; \
+			failed=1; \
+		} && echo "  ✓ $$pkg found"; \
+	done; \
+	echo "Optional tools:"; \
+	for tool in $(CHECK_OPTIONAL_TOOLS); do \
+		command -v $$tool >/dev/null 2>&1 || { \
+			echo "  ⚠ $$tool not found (optional)"; \
+		} && echo "  ✓ $$tool found"; \
+	done; \
+	if [ $$failed -eq 1 ]; then \
+		echo ""; \
+		echo "Some required dependencies are missing."; \
+		echo "Run 'make deps' to see installation instructions."; \
 		exit 1; \
-	}
-	@echo "✓ pkg-config found"
-	@echo "All dependencies satisfied!"
+	else \
+		echo ""; \
+		echo "All required dependencies satisfied!"; \
+	fi
 
 require-glib:
 	@pkg-config --exists glib-2.0 || { \
@@ -200,7 +249,7 @@ coverage: require-glib
 		libname=$${testname%_test}; \
 		if [ "$$libname" = "foo" ]; then \
 			echo "Testing $$libname with coverage..."; \
-			$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(GLIB_LIBS) --coverage -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
+			$(CC) $(CFLAGS_TEST) -I./src $$test src/$$libname.c $(TEST_LDFLAGS) --coverage -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
 			$(TMPDIR)/$$testname || exit 1; \
 		fi; \
 	done
@@ -228,7 +277,7 @@ sanitize: require-glib clean
 		libname=$${testname%_test}; \
 		if [ "$$libname" = "foo" ]; then \
 			echo "Testing $$libname with sanitizers..."; \
-			$(CC) $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_TEST)) -I./src $$test src/$$libname.c $(GLIB_LIBS) -fsanitize=address,undefined -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
+			$(CC) $(filter-out -D_FORTIFY_SOURCE=2,$(CFLAGS_TEST)) -I./src $$test src/$$libname.c $(TEST_LDFLAGS) -fsanitize=address,undefined -MF $(TMPDIR)/$$testname.d -o $(TMPDIR)/$$testname; \
 			$(TMPDIR)/$$testname || exit 1; \
 		fi; \
 	done
@@ -238,7 +287,8 @@ analyze:
 	@mkdir -p $(REPORTSDIR) $(TMPDIR)
 	@command -v clang >/dev/null 2>&1 && { \
 		echo "Using clang static analyzer..."; \
-		if clang --analyze $(filter-out -MMD -MP -fanalyzer,$(CFLAGS)) src/foo.c tests/foo_test.c; then \
+		if clang --analyze $(filter-out -MMD -MP -fanalyzer,$(CFLAGS)) -I./src src/foo.c && \
+		   clang --analyze $(filter-out -MMD -MP -fanalyzer,$(CFLAGS_TEST)) -I./src tests/foo_test.c; then \
 			echo "Static analysis completed - no issues found!"; \
 		fi; \
 		mv *.plist $(REPORTSDIR)/ 2>/dev/null || true; \

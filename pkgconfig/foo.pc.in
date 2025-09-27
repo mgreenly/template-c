@@ -7,7 +7,7 @@ Name: foo
 Description: A simple C library for mathematical operations
 Version: @VERSION@
 URL: https://github.com/example/libfoo
-Requires: @PNG_PC_REQUIRES@
+Requires: @PC_REQUIRES@
 Requires.private:
 Libs: -L${libdir} -Wl,-rpath,${libdir} -lfoo
 Libs.private:

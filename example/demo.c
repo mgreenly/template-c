@@ -15,8 +15,9 @@ int main() {
     printf("foo_add(0, 0) = %d\n", foo_add(0, 0));
     printf("\n");
 
-    printf("PNG dependency test:\n");
+    printf("Library dependencies:\n");
     printf("PNG library version: %s\n", foo_get_png_version());
+    printf("JPEG library version: %s\n", foo_get_jpeg_version());
 
     return 0;
 }

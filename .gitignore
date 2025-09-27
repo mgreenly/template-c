@@ -12,6 +12,7 @@ tmp/
 *.gcda
 *.gcov
 *.plist
+src/version.h
 
 # Executables
 bin/
