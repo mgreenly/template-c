@@ -1,10 +1,6 @@
 # libfoo
 
-Run `rename.sh foo foo` to set your libraries name then delete the `rename.sh` script.
-
-## Description
-
-It doesn't matter what it does it will get replaced by your code ;-)
+Run `./rename foo foo` to set your libraries name then delete the `rename` script.  Then create your own README.
 
 ## Install
 
