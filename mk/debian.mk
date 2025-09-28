@@ -2,7 +2,7 @@ CC := gcc
 
 MULTIARCH_TUPLE := $(shell dpkg --print-architecture 2>/dev/null || echo "amd64")-linux-gnu
 
-# libs
+# libs section
 PNG_NAME := png16
 PNG_LIBS := -l$(PNG_NAME)
 PNG_CFLAGS := $(shell pkg-config --cflags lib$(PNG_NAME) 2>/dev/null)

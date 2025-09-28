@@ -4,6 +4,7 @@ Run `./rename foo yourlib` to set your library's name then delete the `rename` s
 
 After renaming, update these files for your project:
 
+- `LICENSE` - replace with your license.
 - `pkgconfig/foo.pc.in` - Update the Description and URL fields
 - `Makefile` - Update VERSION_MAJOR/MINOR/PATCH (lines 3-5) - this generates version.h automatically
 - `mk/debian.mk` and `mk/darwin.mk` - Remove PNG/JPEG dependencies, add your own:

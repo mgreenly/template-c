@@ -1,13 +1,13 @@
-prefix=@PREFIX@
+prefix=${PREFIX}
 exec_prefix=${prefix}
-libdir=@LIBDIR_INSTALL@
+libdir=${LIBDIR_INSTALL}
 includedir=${prefix}/include
 
 Name: foo
 Description: A simple C library for mathematical operations
-Version: @VERSION@
+Version: ${VERSION}
 URL: https://github.com/example/libfoo
-Requires: @PC_REQUIRES@
+Requires: ${PC_REQUIRES}
 Requires.private:
 Libs: -L${libdir} -Wl,-rpath,${libdir} -lfoo
 Libs.private:

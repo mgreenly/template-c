@@ -64,7 +64,7 @@ DYNAMIC_LIB_LINK := $(LIBDIR)/lib$(LIBNAME).so
 # On Debian: $(PREFIX)/lib/amd64-linux-gnu, on macOS: $(PREFIX)/lib
 LIBDIR_INSTALL := $(PREFIX)/lib$(if $(MULTIARCH_TUPLE),/$(MULTIARCH_TUPLE))
 
-all: $(STATIC_LIB) $(DYNAMIC_LIB) $(LIBNAME).pc
+all: $(STATIC_LIB) $(DYNAMIC_LIB) $(TMPDIR)/$(LIBNAME).pc
 
 release: CFLAGS = $(CFLAGS_RELEASE) $(DISTRO_CFLAGS)
 release: clean all
@@ -107,12 +107,41 @@ $(DYNAMIC_LIB): $(LIB_OBJECTS) | $(LIBDIR)
 	cd $(LIBDIR) && ln -sf lib$(LIBNAME).so.$(VERSION) lib$(LIBNAME).so
 
 
+# Benchmark sources and binaries
+BENCH_TEST_SRCS := $(filter-out bench/bench_utils.c, $(wildcard bench/bench_*.c))
+BENCH_UTILS := $(TMPDIR)/bench_utils.o
+BENCH_PROGS := $(patsubst bench/bench_%.c,$(TMPDIR)/bench_%,$(BENCH_TEST_SRCS))
+
+# Build and run all benchmarks
+bench: $(TMPDIR) $(BENCH_PROGS)
+	@echo "Running benchmarks with nice -n -20 (may require sudo)..."
+	@for prog in $(BENCH_PROGS); do \
+		echo ""; \
+		echo "=== $$(basename $$prog) ==="; \
+		nice -n -20 $$prog 2>/dev/null || $$prog; \
+	done
+
+# Pattern rule for building benchmark binaries
+$(TMPDIR)/bench_%: $(TMPDIR)/bench_%.o $(BENCH_UTILS) $(STATIC_LIB)
+	$(CC) $(CFLAGS) $^ -o $@ $(LDFLAGS)
+
+# Compile benchmark object files
+$(TMPDIR)/bench_%.o: bench/bench_%.c | $(TMPDIR)
+	$(CC) $(CFLAGS) -I$(SRCDIR) -c $< -o $@
+
+# Compile benchmark utils
+$(TMPDIR)/bench_utils.o: bench/bench_utils.c | $(TMPDIR)
+	$(CC) $(CFLAGS) -I$(SRCDIR) -c $< -o $@
+
+$(TMPDIR):
+	mkdir -p $(TMPDIR)
+
 clean:
-	rm -rf $(OBJDIR) $(LIBDIR) $(REPORTSDIR) $(TMPDIR) tags $(LIBNAME).pc $(SRCDIR)/version.h
+	rm -rf $(OBJDIR) $(LIBDIR) $(REPORTSDIR) $(TMPDIR) tags $(SRCDIR)/version.h example/demo
 
 -include $(DEPS)
 
-.PHONY: all release clean check install uninstall tags fmt help deps check-deps coverage sanitize analyze check-all
+.PHONY: all release clean check install uninstall tags fmt help deps check-deps coverage sanitize analyze check-all bench
 
 check: require-glib
 	@mkdir -p $(TMPDIR)
@@ -130,14 +159,11 @@ check: require-glib
 	@echo ""
 
 # Generate pkg-config file
-$(LIBNAME).pc: pkgconfig/$(LIBNAME).pc.in
-	sed -e 's|@PREFIX@|$(PREFIX)|g' \
-	    -e 's|@LIBDIR_INSTALL@|$(LIBDIR_INSTALL)|g' \
-	    -e 's|@VERSION@|$(VERSION)|g' \
-	    -e 's|@PC_REQUIRES@|$(PC_REQUIRES)|g' \
-	    $< > $@
+$(TMPDIR)/$(LIBNAME).pc: pkgconfig/$(LIBNAME).pc.in | $(TMPDIR)
+	PREFIX="$(PREFIX)" LIBDIR_INSTALL="$(LIBDIR_INSTALL)" VERSION="$(VERSION)" PC_REQUIRES="$(PC_REQUIRES)" \
+	envsubst '$$PREFIX $$LIBDIR_INSTALL $$VERSION $$PC_REQUIRES' < $< > $@
 
-install: $(STATIC_LIB) $(DYNAMIC_LIB) $(LIBNAME).pc
+install: $(STATIC_LIB) $(DYNAMIC_LIB) $(TMPDIR)/$(LIBNAME).pc
 	@mkdir -p $(LIBDIR_INSTALL)
 	@mkdir -p $(PREFIX)/include/$(LIBNAME)
 	@mkdir -p $(PREFIX)/lib/pkgconfig
@@ -147,7 +173,7 @@ install: $(STATIC_LIB) $(DYNAMIC_LIB) $(LIBNAME).pc
 	cd $(LIBDIR_INSTALL) && ln -sf lib$(LIBNAME).so.$(VERSION) lib$(LIBNAME).so
 	install -m 644 src/$(LIBNAME).h $(PREFIX)/include/$(LIBNAME)/
 	install -m 644 src/version.h $(PREFIX)/include/$(LIBNAME)/
-	install -m 644 $(LIBNAME).pc $(PREFIX)/lib/pkgconfig/
+	install -m 644 $(TMPDIR)/$(LIBNAME).pc $(PREFIX)/lib/pkgconfig/
 
 uninstall:
 	rm -f $(LIBDIR_INSTALL)/lib$(LIBNAME).a
@@ -178,6 +204,7 @@ help:
 	@echo "  install    - Install the library (use PREFIX=/path to specify location)"
 	@echo "  uninstall  - Uninstall the library"
 	@echo "  check      - Run tests"
+	@echo "  bench      - Run benchmarks"
 	@echo "  check-all  - Run comprehensive checks (check + analyze + sanitize + coverage)"
 	@echo "  analyze    - Run static analysis (clang or cppcheck)"
 	@echo "  sanitize   - Run tests with AddressSanitizer and UBSan"
